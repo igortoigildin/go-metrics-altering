@@ -24,6 +24,7 @@ type ConfigServer struct {
 	FlagStorePath     string
 	FlagRestore       bool
 	FlagDBDSN         string
+	FlagHashKey       string
 }
 
 func LoadConfig() (*ConfigServer, error) {
@@ -36,12 +37,16 @@ func LoadConfig() (*ConfigServer, error) {
 	flag.StringVar(&cfg.FlagStorePath, "f", "/tmp/metrics-db.json", "metrics backup storage path")
 	flag.BoolVar(&cfg.FlagRestore, "r", false, "true if load from backup is needed")
 	flag.StringVar(&cfg.FlagDBDSN, "d", "", "string with DB DSN")
+	flag.StringVar(&cfg.FlagHashKey, "k", "", "hash key")
 	flag.Parse()
 	if envRunAddr := os.Getenv("ADDRESS"); envRunAddr != "" {
 		cfg.FlagRunAddr = envRunAddr
 	}
 	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
 		cfg.FlagLogLevel = envLogLevel
+	}
+	if envHashKey := os.Getenv("KEY"); envHashKey != "" {
+		cfg.FlagHashKey = envHashKey
 	}
 	if envStorageInterval := os.Getenv("STORE_INTERVAL"); envStorageInterval != "" {
 		// parse string env variable

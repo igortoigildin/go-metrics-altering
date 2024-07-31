@@ -3,7 +3,10 @@ package memory
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"time"
 
@@ -19,35 +22,34 @@ func (m *MemoryStats) SendBatchMetrics(cfg *config.ConfigAgent) {
 		metrics := []models.Metrics{}
 		time.Sleep(cfg.PauseDuration)
 		for i, v := range m.GaugeMetrics {
-			metricGauge := models.Metrics{
-				ID:    i,
-				MType: config.GaugeType,
-				Value: &v,
-			}
+			metricGauge := models.GaugeConstructor(v, i)
 			metrics = append(metrics, metricGauge)
 		}
-		countDelta := int64(m.CounterMetric)
-		metricCounter := models.Metrics{
-			ID:    config.PollCount,
-			MType: config.CountType,
-			Delta: &countDelta,
-		}
+		metricCounter := models.CounterConstructor(int64(m.CounterMetric))
 		metrics = append(metrics, metricCounter)
 		err := sendAllMetrics(cfg, metrics)
 		if err != nil {
 			logger.Log.Info("unexpected sending batch metrics error:", zap.Error(err))
 		}
-		logger.Log.Info("Metrics batch sent successfully")
 	}
 }
 
 func sendAllMetrics(cfg *config.ConfigAgent, metrics []models.Metrics) error {
 	agent := resty.New()
-	req := agent.R().SetHeader("Content-Type", "application/json").SetHeader("Content-Encoding", "gzip").SetHeader("Accept-Encoding", "gzip")
+	req := agent.R().SetHeader("Content-Type", "application/json").
+		SetHeader("Content-Encoding", "gzip").SetHeader("Accept-Encoding", "gzip")
 	metricsJSON, err := json.Marshal(metrics)
 	if err != nil {
 		logger.Log.Info("marshalling json error:", zap.Error(err))
 		return err
+	}
+	// signing metric value with sha256 and setting header accordingly
+	if cfg.FlagHashKey != "" {
+		key := []byte(cfg.FlagHashKey)
+		h := hmac.New(sha256.New, key)
+		h.Write(metricsJSON)
+		dst := h.Sum(nil)
+		req.SetHeader("HashSHA256", fmt.Sprintf("%x", dst))
 	}
 	var compressedRequest bytes.Buffer
 	writer := gzip.NewWriter(&compressedRequest)

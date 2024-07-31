@@ -18,22 +18,26 @@ import (
 
 type app struct {
 	storage storage.Storage
+	cfg     *config.ConfigServer
 }
 
-func newApp(s storage.Storage) *app {
-	return &app{storage: s}
+func newApp(s storage.Storage, cfg *config.ConfigServer) *app {
+	return &app{
+		storage: s,
+		cfg:     cfg,
+	}
 }
 
 func routerDB(ctx context.Context, cfg *config.ConfigServer) chi.Router {
 	repo := storage.InitPostgresRepo(ctx, cfg)
-	app := newApp(repo)
+	app := newApp(repo, cfg)
 	t = templates.ParseTemplate()
 	r := chi.NewRouter()
 	r.Get("/ping", WithLogging(gzipMiddleware(http.HandlerFunc(app.Ping))))
-	r.Get("/", WithLogging(gzipMiddleware(http.HandlerFunc(app.getAllmetrics))))
-	r.Post("/update/", WithLogging(gzipMiddleware(http.HandlerFunc(app.updateMetric))))
-	r.Post("/updates/", WithLogging(gzipMiddleware(http.HandlerFunc(app.updates))))
-	r.Post("/value/", WithLogging(gzipMiddleware(http.HandlerFunc(app.getMetric))))
+	r.Get("/", WithLogging(gzipMiddleware(auth(http.HandlerFunc(app.getAllmetrics), cfg))))
+	r.Post("/update/", WithLogging(gzipMiddleware(auth(http.HandlerFunc(app.updateMetric), cfg))))
+	r.Post("/updates/", WithLogging(gzipMiddleware(auth(http.HandlerFunc(app.updates), cfg))))
+	r.Post("/value/", WithLogging(gzipMiddleware(auth(http.HandlerFunc(app.getMetric), cfg))))
 	return r
 }
 
@@ -62,8 +66,7 @@ func (app *app) updates(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	// iterating through []Metrics and adding it to db one by one
-	for _, metric := range metrics {
+	for _, metric := range metrics { // iterating through []Metrics and adding it to db one by one
 		if metric.MType != config.GaugeType && metric.MType != config.CountType {
 			logger.Log.Debug("usupported request type", zap.String("type", metric.MType))
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -102,10 +105,11 @@ func (app *app) updateMetric(w http.ResponseWriter, r *http.Request) {
 	var req models.Metrics
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
-		logger.Log.Debug("cannot decode request JSON body", zap.Error(err))
+		logger.Log.Info("cannot decode request JSON body", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	defer r.Body.Close()
 	if req.MType != config.GaugeType && req.MType != config.CountType {
 		logger.Log.Debug("usupported request type", zap.String("type", req.MType))
 		w.WriteHeader(http.StatusUnprocessableEntity)

@@ -35,7 +35,7 @@ func InitRepo(c context.Context, cfg *config.ConfigServer) *DB {
 }
 
 // iterate through memStorage
-func (m MemStorage) ConvertToSlice() []models.Metrics {
+func (m *MemStorage) ConvertToSlice() []models.Metrics {
 	metricSlice := make([]models.Metrics, 33)
 	var model models.Metrics
 	for i, v := range m.Gauge {

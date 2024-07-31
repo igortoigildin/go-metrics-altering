@@ -20,9 +20,8 @@ var t *template.Template
 
 func MetricRouter(cfg *config.ConfigServer, ctx context.Context) chi.Router {
 	var m = InitStorage()
-	// if flag restore is true - load metrics from the local file
 	if cfg.FlagRestore {
-		err := m.Load(cfg.FlagStorePath)
+		err := m.Load(cfg.FlagStorePath) // if flag restore is true - load metrics from the local file
 		if err != nil {
 			logger.Log.Info("error loading metrics from the file", zap.Error(err))
 		}
@@ -35,15 +34,15 @@ func MetricRouter(cfg *config.ConfigServer, ctx context.Context) chi.Router {
 	DB := InitRepo(ctx, cfg)
 	r.Get("/ping", WithLogging(gzipMiddleware(http.HandlerFunc(DB.Ping))))
 	// v1
-	r.Get("/value/{metricType}/{metricName}", WithLogging(gzipMiddleware(http.HandlerFunc(m.ValueHandle))))
-	r.Get("/", WithLogging(gzipMiddleware(http.HandlerFunc(m.InformationHandle))))
+	r.Get("/value/{metricType}/{metricName}", WithLogging(gzipMiddleware(auth(http.HandlerFunc(m.ValueHandle), cfg))))
+	r.Get("/", WithLogging(gzipMiddleware(http.HandlerFunc(auth(m.InformationHandle, cfg)))))
 
 	r.Route("/", func(r chi.Router) {
 		// v1
-		r.Post("/update/{metricType}/{metricName}/{metricValue}", WithLogging(gzipMiddleware(http.HandlerFunc(m.UpdateHandle))))
+		r.Post("/update/{metricType}/{metricName}/{metricValue}", WithLogging(gzipMiddleware(auth(http.HandlerFunc(m.UpdateHandle), cfg))))
 		// v2
-		r.Post("/update/", WithLogging(gzipMiddleware(http.HandlerFunc(m.UpdateHandler))))
-		r.Post("/value/", WithLogging(gzipMiddleware(http.HandlerFunc(m.ValueHandler))))
+		r.Post("/update/", WithLogging(gzipMiddleware(auth(http.HandlerFunc(m.UpdateHandler), cfg))))
+		r.Post("/value/", WithLogging(gzipMiddleware(auth(http.HandlerFunc(m.ValueHandler), cfg))))
 	})
 	return r
 }
@@ -111,7 +110,7 @@ func (m *MemStorage) UpdateHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("sending HTTP 200 response")
 }
 
-// v2 with requst body
+// v2 with request body
 func (m *MemStorage) ValueHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		logger.Log.Debug("got request with bad method", zap.String("method", r.Method))

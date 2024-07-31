@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	config "github.com/igortoigildin/go-metrics-altering/config/server"
 	"github.com/igortoigildin/go-metrics-altering/internal/logger"
@@ -10,6 +11,7 @@ import (
 )
 
 type MemStorage struct {
+	rm      sync.RWMutex
 	Gauge   map[string]float64
 	Counter map[string]int64
 }
@@ -50,32 +52,45 @@ func (m *MemStorage) UpdateGaugeMetric(metricName string, metricValue float64) {
 	if m.Gauge == nil {
 		m.Gauge = make(map[string]float64)
 	}
+	m.rm.Lock()
 	m.Gauge[metricName] = metricValue
+	m.rm.Unlock()
 }
 
 func (m *MemStorage) UpdateCounterMetric(metricName string, metricValue int64) {
 	if m.Counter == nil {
 		m.Counter = make(map[string]int64)
 	}
+	m.rm.Lock()
 	m.Counter[metricName] += metricValue
-
+	m.rm.Unlock()
 }
 
 func (m *MemStorage) GetGaugeMetricFromMemory(metricName string) float64 {
-	return m.Gauge[metricName]
+	m.rm.RLock()
+	metric := m.Gauge[metricName]
+	m.rm.RUnlock()
+	return metric
 }
 
 func (m *MemStorage) GetCountMetricFromMemory(metricName string) int64 {
-	return m.Counter[metricName]
+	m.rm.RLock()
+	metric := m.Counter[metricName]
+	m.rm.RUnlock()
+	return metric
 }
 
 func (m *MemStorage) CheckIfGaugeMetricPresent(metricName string) bool {
+	m.rm.RLock()
 	_, ok := m.Gauge[metricName]
+	m.rm.RUnlock()
 	return ok
 }
 
 func (m *MemStorage) CheckIfCountMetricPresent(metricName string) bool {
+	m.rm.RLock()
 	_, ok := m.Counter[metricName]
+	m.rm.RUnlock()
 	return ok
 }
 
