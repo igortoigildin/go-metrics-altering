@@ -42,19 +42,19 @@ func (pg *PGStorage) SetStrategy(metricType string) {
 	}
 }
 
-func InitPostgresRepo(ctx context.Context, cfg *config.ConfigServer) *PGStorage {
+func New(cfg *config.ConfigServer) *PGStorage {
 	dbDSN := cfg.FlagDBDSN
 	conn, err := sql.Open("pgx", dbDSN)
 	if err != nil {
 		logger.Log.Info("error while connecting to DB", zap.Error(err))
 	}
 	rep := NewPGStorage(conn)
-	_, err = rep.conn.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS counters (id SERIAL, name TEXT NOT NULL,"+
+	_, err = rep.conn.ExecContext(context.TODO(), "CREATE TABLE IF NOT EXISTS counters (id SERIAL, name TEXT NOT NULL,"+
 		"type TEXT NOT NULL, value bigint, primary key(name));")
 	if err != nil {
 		logger.Log.Info("error while creating counters table", zap.Error(err))
 	}
-	_, err = rep.conn.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS gauges (id SERIAL, name TEXT NOT NULL,"+
+	_, err = rep.conn.ExecContext(context.TODO(), "CREATE TABLE IF NOT EXISTS gauges (id SERIAL, name TEXT NOT NULL,"+
 		"type TEXT NOT NULL, value DOUBLE PRECISION, primary key(name));")
 	if err != nil {
 		logger.Log.Info("error while creating gauges table", zap.Error(err))

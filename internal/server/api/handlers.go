@@ -12,20 +12,16 @@ import (
 	"github.com/go-chi/chi"
 	config "github.com/igortoigildin/go-metrics-altering/config/server"
 	"github.com/igortoigildin/go-metrics-altering/internal/models"
+	"github.com/igortoigildin/go-metrics-altering/internal/storage"
 	"github.com/igortoigildin/go-metrics-altering/pkg/logger"
 	processjson "github.com/igortoigildin/go-metrics-altering/pkg/processJSON"
 	"go.uber.org/zap"
 )
 
 //go:generate go run github.com/vektra/mockery/v2@v2.45.0 --name=Storage
-type Storage interface {
-	Update(ctx context.Context, metricType string, metricName string, metricValue any) error
-	Get(ctx context.Context, metricType string, metricName string) (models.Metrics, error)
-	GetAll(ctx context.Context) (map[string]any, error)
-	Ping(ctx context.Context) error
-}
 
-func ping(Storage Storage) http.HandlerFunc {
+
+func ping(Storage storage.Storage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		if r.Method != http.MethodGet {
@@ -42,7 +38,7 @@ func ping(Storage Storage) http.HandlerFunc {
 	})
 }
 
-func updates(Storage Storage) http.HandlerFunc {
+func updates(Storage storage.Storage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
@@ -88,7 +84,7 @@ func updates(Storage Storage) http.HandlerFunc {
 	})
 }
 
-func updateMetric(Storage Storage) http.HandlerFunc {
+func updateMetric(Storage storage.Storage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
@@ -143,7 +139,7 @@ func updateMetric(Storage Storage) http.HandlerFunc {
 	})
 }
 
-func getAllmetrics(Storage Storage) http.HandlerFunc {
+func getAllmetrics(Storage storage.Storage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Add("Content-Encoding", "gzip")
@@ -159,7 +155,7 @@ func getAllmetrics(Storage Storage) http.HandlerFunc {
 	})
 }
 
-func getMetric(Storage Storage) http.HandlerFunc {
+func getMetric(Storage storage.Storage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
@@ -230,7 +226,7 @@ func getMetric(Storage Storage) http.HandlerFunc {
 	})
 }
 
-func updatePathHandler(LocalStorage Storage) http.HandlerFunc {
+func updatePathHandler(LocalStorage storage.Storage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		metricType := chi.URLParam(r, "metricType")
@@ -270,7 +266,7 @@ func updatePathHandler(LocalStorage Storage) http.HandlerFunc {
 	})
 }
 
-func valuePathHandler(LocalStorage Storage) http.HandlerFunc {
+func valuePathHandler(LocalStorage storage.Storage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		metricType := chi.URLParam(r, "metricType")

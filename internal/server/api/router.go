@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	config "github.com/igortoigildin/go-metrics-altering/config/server"
+	"github.com/igortoigildin/go-metrics-altering/internal/storage"
 	auth "github.com/igortoigildin/go-metrics-altering/pkg/middlewares/auth"
 	compress "github.com/igortoigildin/go-metrics-altering/pkg/middlewares/compress"
 	logging "github.com/igortoigildin/go-metrics-altering/pkg/middlewares/logging"
@@ -17,7 +18,7 @@ import (
 
 var t *template.Template
 
-func Router(ctx context.Context, cfg *config.ConfigServer, storage Storage) chi.Router {
+func Router(ctx context.Context, cfg *config.ConfigServer, storage storage.Storage) chi.Router {
 	t = templates.ParseTemplate()
 	r := chi.NewRouter()
 
