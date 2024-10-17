@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sync"
 
 	config "github.com/igortoigildin/go-metrics-altering/config/agent"
@@ -11,13 +12,23 @@ import (
 	"go.uber.org/zap"
 )
 
+var buildVersion string = "N/A"
+var buildDate string = "N/A"
+var buildCommit string = "N/A"
+
 func main() {
+	fmt.Printf("Build version: %s\n", buildVersion)
+	fmt.Printf("Build date: %s\n", buildDate)
+	fmt.Printf("Build commit: %s\n", buildCommit)
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		logger.Log.Fatal("error while logading config", zap.Error(err))
+		logger.Log.Info("error while logading config", zap.Error(err))
+		return
 	}
 	if err := logger.Initialize(cfg.FlagLogLevel); err != nil {
 		logger.Log.Fatal("error while initializing logger", zap.Error(err))
+		return
 	}
 
 	logger.Log.Info("loading metrics...")

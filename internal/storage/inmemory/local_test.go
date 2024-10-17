@@ -15,7 +15,7 @@ func TestLocalStorage_SetStrategy(t *testing.T) {
 	type fields struct {
 		Gauge    map[string]float64
 		Counter  map[string]int64
-		strategy Strategy
+		strategy MetricAlgo
 	}
 
 	tests := []struct {
@@ -41,7 +41,7 @@ func TestLocalStorage_SetStrategy(t *testing.T) {
 				Counter:  tt.fields.Counter,
 				strategy: tt.fields.strategy,
 			}
-			m.SetStrategy(tt.metricType)
+			m.setMetricAlgo(tt.metricType)
 
 			assert.True(t, m.strategy != nil)
 		})
@@ -60,7 +60,7 @@ func TestInitLocalStorage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := InitLocalStorage()
+			a := New()
 			assert.True(t, a.Counter != nil)
 			assert.True(t, a.Gauge != nil)
 		})
@@ -68,7 +68,7 @@ func TestInitLocalStorage(t *testing.T) {
 }
 
 func TestLocalStorage_Update(t *testing.T) {
-	m := InitLocalStorage()
+	m := New()
 	g, c := float64(45), int64(50)
 
 	type args struct {
@@ -128,13 +128,11 @@ func TestLocalStorage_Update(t *testing.T) {
 
 		switch tt.args.metricType {
 		case "gauge":
-			v, _ := tt.args.metricValue.(*float64)
-			res := *v
+			res, _ := tt.args.metricValue.(float64)
 
 			assert.Equal(t, res, m.Gauge[tt.args.metricName])
 		case "counter":
-			v, _ := tt.args.metricValue.(*int64)
-			res := *v
+			res, _ := tt.args.metricValue.(int64)
 
 			assert.Equal(t, res, m.Counter[tt.args.metricName])
 		}
@@ -143,7 +141,7 @@ func TestLocalStorage_Update(t *testing.T) {
 }
 
 func TestLocalStorage_Get(t *testing.T) {
-	m := InitLocalStorage()
+	m := New()
 	m.Counter["count_metric"] = int64(25)
 	m.Gauge["gauge_metric"] = float64(50)
 	m1 := m.Counter["count_metric"]
@@ -221,7 +219,7 @@ func TestLocalStorage_Get(t *testing.T) {
 }
 
 func TestLocalStorage_GetAll(t *testing.T) {
-	m := InitLocalStorage()
+	m := New()
 	m.Counter["count_metric"] = int64(25)
 	m.Gauge["gauge_metric"] = float64(50)
 
@@ -238,7 +236,7 @@ func TestLocalStorage_GetAll(t *testing.T) {
 }
 
 func TestLocalStorage_Ping(t *testing.T) {
-	m := InitLocalStorage()
+	m := New()
 	err := m.Ping(context.TODO())
 	assert.NoError(t, err)
 
@@ -249,7 +247,7 @@ func TestLocalStorage_Ping(t *testing.T) {
 
 func TestLocalStorage_LoadMetricsFromFile(t *testing.T) {
 	// Input data preparation: initializing storage with data.
-	m := InitLocalStorage()
+	m := New()
 	m.Counter["count_metric"] = int64(25)
 	m.Gauge["gauge_metric"] = float64(50)
 	metrics, _ := m.GetAll(context.Background())
@@ -275,7 +273,7 @@ func TestLocalStorage_LoadMetricsFromFile(t *testing.T) {
 	// Input data preparation: writing data to file.
 	_ = os.WriteFile("temp", data, 0606)
 
-	l := InitLocalStorage()
+	l := New()
 
 	_ = l.LoadMetricsFromFile("temp")
 	assert.Equal(t, m.Counter["count_metric"], l.Counter["count_metric"])
@@ -284,7 +282,7 @@ func TestLocalStorage_LoadMetricsFromFile(t *testing.T) {
 
 func TestLocalStorage_SaveAllMetricsToFile(t *testing.T) {
 	var fileName = "temp"
-	m := InitLocalStorage()
+	m := New()
 	m.Counter["count_metric"] = int64(25)
 	m.Gauge["gauge_metric"] = float64(50)
 
@@ -295,7 +293,7 @@ func TestLocalStorage_SaveAllMetricsToFile(t *testing.T) {
 		data, _ = os.ReadFile(fileName)
 	}
 
-	l := InitLocalStorage()
+	l := New()
 	_ = l.LoadMetricsFromFile(fileName)
 	assert.Equal(t, m.Counter["count_metric"], l.Counter["count_metric"])
 	assert.Equal(t, m.Counter["gauge_metric"], l.Counter["gauge_metric"])

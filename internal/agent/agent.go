@@ -23,20 +23,20 @@ func SendMetrics(metricsChan <-chan models.Metrics, cfg *config.ConfigAgent) {
 			case config.CountType:
 				err := sendURLCounter(cfg, int(*metric.Delta))
 				if err != nil {
-					logger.Log.Info("unexpected sending url counter metric error:", zap.Error(err))
+					logger.Log.Error("unexpected sending url counter metric error:", zap.Error(err))
 				}
 				err = SendJSONCounter(int(*metric.Delta), cfg)
 				if err != nil {
-					logger.Log.Info("unexpected sending json counter metric error:", zap.Error(err))
+					logger.Log.Error("unexpected sending json counter metric error:", zap.Error(err))
 				}
 			case config.GaugeType:
 				err := SendURLGauge(cfg, *metric.Value, metric.ID)
 				if err != nil {
-					logger.Log.Info("unexpected sending url gauge metric error:", zap.Error(err))
+					logger.Log.Error("unexpected sending url gauge metric error:", zap.Error(err))
 				}
 				err = SendJSONGauge(metric.ID, cfg, *metric.Value)
 				if err != nil {
-					logger.Log.Info("unexpected sending json gauge metric error:", zap.Error(err))
+					logger.Log.Error("unexpected sending json gauge metric error:", zap.Error(err))
 				}
 			}
 		}

@@ -9,9 +9,10 @@ import (
 
 	_ "net/http/pprof" // подключаем пакет pprof
 
-	"github.com/go-chi/chi"
 	config "github.com/igortoigildin/go-metrics-altering/config/server"
 	"github.com/igortoigildin/go-metrics-altering/internal/models"
+	local "github.com/igortoigildin/go-metrics-altering/internal/storage/inmemory"
+	psql "github.com/igortoigildin/go-metrics-altering/internal/storage/postgres"
 	"github.com/igortoigildin/go-metrics-altering/pkg/logger"
 	processjson "github.com/igortoigildin/go-metrics-altering/pkg/processJSON"
 	"go.uber.org/zap"
@@ -23,6 +24,26 @@ type Storage interface {
 	Get(ctx context.Context, metricType string, metricName string) (models.Metrics, error)
 	GetAll(ctx context.Context) (map[string]any, error)
 	Ping(ctx context.Context) error
+}
+
+func New(cfg *config.ConfigServer) Storage {
+	if cfg.FlagDBDSN != "" {
+		storage := psql.New(cfg)
+		return storage
+	}
+
+	memory := local.New()
+
+	if cfg.FlagRestore {
+		err := memory.LoadMetricsFromFile(cfg.FlagStorePath)
+		if err != nil {
+			logger.Log.Error("error loading metrics from the file", zap.Error(err))
+		}
+	}
+	if cfg.FlagStorePath != "" {
+		go memory.SaveAllMetricsToFile(cfg.FlagStoreInterval, cfg.FlagStorePath, cfg.FlagStorePath)
+	}
+	return memory
 }
 
 func ping(Storage Storage) http.HandlerFunc {
@@ -137,7 +158,7 @@ func updateMetric(Storage Storage) http.HandlerFunc {
 		}
 		err = processjson.WriteJSON(w, http.StatusOK, resp, nil)
 		if err != nil {
-			logger.Log.Info("error encoding response", zap.Error(err))
+			logger.Log.Error("error encoding response", zap.Error(err))
 			return
 		}
 	})
@@ -153,8 +174,10 @@ func getAllmetrics(Storage Storage) http.HandlerFunc {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		if err := t.Execute(w, metrics); err != nil {
-			logger.Log.Info("error executing template", zap.Error(err))
+		err = processjson.WriteJSON(w, http.StatusOK, metrics, nil)
+		if err != nil {
+			logger.Log.Info("error encoding response", zap.Error(err))
+			return
 		}
 	})
 }
@@ -163,7 +186,7 @@ func getMetric(Storage Storage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		if r.Method != http.MethodPost {
+		if r.Method != http.MethodGet {
 			logger.Log.Info("got request with bad method", zap.String("method", r.Method))
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -173,7 +196,7 @@ func getMetric(Storage Storage) http.HandlerFunc {
 		err := processjson.ReadJSON(r, &req)
 		if err != nil {
 			logger.Log.Info("cannot decode request JSON body", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
@@ -233,35 +256,40 @@ func getMetric(Storage Storage) http.HandlerFunc {
 func updatePathHandler(LocalStorage Storage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		metricType := chi.URLParam(r, "metricType")
-		metricName := chi.URLParam(r, "metricName")
-
-		if metricName == "" {
-			logger.Log.Info("metricName not provided")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		metricValue := chi.URLParam(r, "metricValue")
+		metricType := r.PathValue("metricType")
+		metricName := r.PathValue("metricName")
+		metricValue := r.PathValue("metricValue")
 
 		switch metricType {
 		case config.GaugeType:
 			metricValueConverted, err := strconv.ParseFloat(metricValue, 64)
 			if err != nil {
-
-				logger.Log.Info("error parsing metric value to float", zap.Error(err))
+				logger.Log.Error("error parsing metric value to float", zap.Error(err))
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			LocalStorage.Update(context.TODO(), config.GaugeType, metricName, metricValueConverted)
+
+			err = LocalStorage.Update(context.TODO(), config.GaugeType, metricName, metricValueConverted)
+			if err != nil {
+				logger.Log.Error("error while updating metric", zap.Error(err))
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
 		case config.CountType:
 			metricValueConverted, err := strconv.ParseInt(metricValue, 10, 64)
 			if err != nil {
-				logger.Log.Info("error parsing metric value to int", zap.Error(err))
+				logger.Log.Error("error parsing metric value to int", zap.Error(err))
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			LocalStorage.Update(context.TODO(), config.CountType, metricName, metricValueConverted)
+
+			err = LocalStorage.Update(context.TODO(), config.CountType, metricName, metricValueConverted)
+			if err != nil {
+				logger.Log.Error("error while updating metric", zap.Error(err))
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -273,26 +301,28 @@ func updatePathHandler(LocalStorage Storage) http.HandlerFunc {
 func valuePathHandler(LocalStorage Storage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		metricType := chi.URLParam(r, "metricType")
-		metricName := chi.URLParam(r, "metricName")
+		metricType := r.PathValue("metricType")
+		metricName := r.PathValue("metricName")
 
 		switch metricType {
 		case config.GaugeType:
 			metric, err := LocalStorage.Get(context.TODO(), config.GaugeType, metricName)
 			if err != nil {
-				logger.Log.Info("error while loading metric", zap.String("metric name", metricName))
+				logger.Log.Error("error while loading metric", zap.Error(err))
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
+
 			w.Write([]byte(strconv.FormatFloat(*metric.Value, 'f', -1, 64)))
-		case metricType:
+		case config.CountType:
 			metric, err := LocalStorage.Get(context.TODO(), config.CountType, config.PollCount)
-			w.Write([]byte(strconv.FormatInt(*metric.Delta, 10)))
 			if err != nil {
-				logger.Log.Info("error while loading metric", zap.String("metric name", metricName))
+				logger.Log.Error("error while loading metric", zap.Error(err))
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
+
+			w.Write([]byte(strconv.FormatInt(*metric.Delta, 10)))
 		default:
 			logger.Log.Info("usupported request type", zap.String("type", metricType))
 			w.WriteHeader(http.StatusUnprocessableEntity)

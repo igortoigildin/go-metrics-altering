@@ -42,10 +42,12 @@ func NewMemoryStats() *MemoryStats {
 func (m *MemoryStats) ReadMetrics(cfg *config.ConfigAgent, metricsChan chan models.Metrics) {
 	for {
 		time.Sleep(cfg.PauseDuration)
+		m.rwm.Lock()
 		for name, value := range m.GaugeMetrics {
 			metric := models.GaugeConstructor(value, name)
 			metricsChan <- metric
 		}
+		m.rwm.Unlock()
 		metric := models.CounterConstructor(int64(m.CounterMetric))
 		metricsChan <- metric
 	}
@@ -60,11 +62,11 @@ func (m *MemoryStats) UpdateCPURAMStat(cfg *config.ConfigAgent) {
 		time.Sleep(cfg.PauseDuration)
 		cpuNumber, err := cpu.Counts(true)
 		if err != nil {
-			logger.Log.Info("error while loading cpu Counts:", zap.Error(err))
+			logger.Log.Error("error while loading cpu Counts:", zap.Error(err))
 		}
 		v, err := mem.VirtualMemory()
 		if err != nil {
-			logger.Log.Info("error while loading virtualmemoryStat:", zap.Error(err))
+			logger.Log.Error("error while loading virtualmemoryStat:", zap.Error(err))
 		}
 		m.rwm.Lock()
 		m.GaugeMetrics["TotalMemory"] = float64(v.Total)
